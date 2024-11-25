@@ -3,22 +3,32 @@
 #include <vector>
 #include <chrono>
 
-int n, l;
+#define FOUND -10
+
+int n, zeroIndex;
 std::vector<std::string> moves;
 
 std::pair<int, int> getIndexes(int num) {
     if (num == 0) {
-        if (l == -1) return {n - 1, n - 1};
-        if (l == 0) return {0, 0};
-        return getIndexes(l);
+        if (zeroIndex == -1) return {sqrt(n + 1) - 1, sqrt(n + 1) - 1};
+        if(zeroIndex == 0) return {0, 0};
+        
+        std::pair<int, int> newIndexes = getIndexes(zeroIndex);
+        if(newIndexes.second < sqrt(n + 1) - 1) return {newIndexes.first, newIndexes.second + 1};
+        return {newIndexes.first + 1, 0};
     }
-    return {(num - 1) / n, (num - 1) % n};
+    if(zeroIndex != -1 && num > zeroIndex) {
+        return {num / sqrt(n + 1), num % (int)sqrt(n + 1)};
+    }
+    return {(num - 1) / sqrt(n + 1), (num - 1) % (int)sqrt(n + 1)};
 }
 
 int calculateManhattan(std::vector<std::vector<int>>& matrix) {
+    int size = sqrt(n + 1);
     int result = 0;
-    for(int i = 0; i < n; i++) {
-        for(int j = 0; j < n; j++) {
+    for(int i = 0; i < size; i++) {
+        for(int j = 0; j < size; j++) {
+            if(matrix[i][j] == 0) continue;
             std::pair<int, int> indexes = getIndexes(matrix[i][j]);
             result += abs(indexes.first - i) + abs(indexes.second - j);
         }
@@ -26,88 +36,112 @@ int calculateManhattan(std::vector<std::vector<int>>& matrix) {
     return result;
 }
 
-bool ida_star(std::vector<std::vector<int>>& matrix, int g, int bound) {
+int ida_star(std::vector<std::vector<int>>& matrix, int g, int bound, std::string lastMove) {
     int manh = calculateManhattan(matrix);
     int f = g + manh;
-    if(f > bound) return false;
-    if(manh == 0) return true;
+    if(f > bound) return f;
+    if(manh == 0) return FOUND;
     int min = 1000000;
-    for(int i = 0; i < n; i++) {
-        for(int j = 0; j < n; j++) {
-            if(matrix[i][j] == l + 1) {
+    for(int i = 0; i < sqrt(n + 1); i++) {
+        for(int j = 0; j < sqrt(n + 1); j++) {
+            if(matrix[i][j] == 0) {
+                if(i < sqrt(n + 1) - 1) {
+                    std::swap(matrix[i][j], matrix[i + 1][j]);
+                    if(lastMove != "down") {
+                        int t = ida_star(matrix, g + 1, bound, "up");
+                        if(t == FOUND) {
+                            moves.push_back("up");
+                            return FOUND;
+                        }
+                        if(t < min) min = t;
+                    }
+                    std::swap(matrix[i][j], matrix[i + 1][j]);
+                }
                 if(i > 0) {
                     std::swap(matrix[i][j], matrix[i - 1][j]);
-                    if(ida_star(matrix, g + 1, bound)) {
-                        moves.push_back("down");
-                        return true;
+                    if(lastMove != "up") {
+                        int t = ida_star(matrix, g + 1, bound, "down");
+                        if(t == FOUND) {
+                            moves.push_back("down");
+                            return FOUND;
+                        }
+                        if(t < min) min = t;
                     }
                     std::swap(matrix[i][j], matrix[i - 1][j]);
-                }
-                if(i < n - 1) {
-                    std::swap(matrix[i][j], matrix[i + 1][j]);
-                    if(ida_star(matrix, g + 1, bound)) {
-                        moves.push_back("up");
-                        return true;
-                    }
-                    std::swap(matrix[i][j], matrix[i + 1][j]);
                 }
                 if(j > 0) {
                     std::swap(matrix[i][j], matrix[i][j - 1]);
-                    if(ida_star(matrix, g + 1, bound)) {
-                        moves.push_back("right");
-                        return true;
+                    if(lastMove != "left") {
+                        int t = ida_star(matrix, g + 1, bound, "right");
+                        if(t == FOUND) {
+                            moves.push_back("right");
+                            return FOUND;
+                        }
+                        if(t < min) min = t;
                     }
                     std::swap(matrix[i][j], matrix[i][j - 1]);
                 }
-                if(j < n - 1) {
+                if(j < sqrt(n + 1) - 1) {
                     std::swap(matrix[i][j], matrix[i][j + 1]);
-                    if(ida_star(matrix, g + 1, bound)) {
-                        moves.push_back("left");
-                        return true;
+                    if(lastMove != "right") {
+                        int t = ida_star(matrix, g + 1, bound, "left");
+                        if(t == FOUND) {
+                            moves.push_back("left");
+                            return FOUND;
+                        }
+                        if(t < min) min = t;
                     }
                     std::swap(matrix[i][j], matrix[i][j + 1]);
                 }
             }
         }
     }
-    return false;
+    return min;
 }
 
-bool isSolvable(std::vector<std::vector<int>>& matrix) {
-    int inversions = 0;
-    std::vector<int> flatMatrix(n * n);
-    for(int i = 0; i < n; i++) {
-        for(int j = 0; j < n; j++) {
-            flatMatrix[i * n + j] = matrix[i][j];
+int calculateInversions(std::vector<std::vector<int>>& matrix) {
+    int size = sqrt(n + 1);
+    std::vector<int> flatMatrix;
+    for(int i = 0; i < size; i++) {
+        for(int j = 0; j < size; j++) {
+            flatMatrix.push_back(matrix[i][j]);
         }
     }
-    for(int i = 0; i < n * n; i++) {
-        for(int j = i + 1; j < n * n; j++) {
+
+    int counter = 0;
+    for(int i = 0; i <= n; i++) {
+        for(int j = i + 1; j <= n; j++) {
             if(flatMatrix[i] > flatMatrix[j] && flatMatrix[i] != 0 && flatMatrix[j] != 0) {
-                inversions++;
+                counter++;
             }
         }
     }
-    if(n % 2 == 1) {
+    return counter;
+}
+
+bool isSolvable(std::vector<std::vector<int>>& matrix) {
+    int size = sqrt(n + 1);
+    int inversions = calculateInversions(matrix);
+    int blankRow = getIndexes(0).first;
+
+    if (size % 2 != 0)
+    {
         return inversions % 2 == 0;
-    } else {
-        std::pair<int, int> zeroIndexes = getIndexes(0);
-        return (inversions + zeroIndexes.first) % 2 == 1;
+    }
+    else
+    {
+        return (inversions + blankRow) % 2 != 0;
     }
 }
 
-
 int main() {
-    std::cin >> n >> l;
-    if(l == -1) {
-        l = n;
-    }
-    n = sqrt(n + 1);
+    std::cin >> n >> zeroIndex;
     
-    std::vector<std::vector<int>> matrix(n, std::vector<int>(n, 0));
+    int size = sqrt(n + 1);
+    std::vector<std::vector<int>> matrix(size, std::vector<int>(size, 0));
 
-    for(int i = 0; i < n; i++) {
-        for(int j = 0; j < n; j++) {
+    for(int i = 0; i < size; i++) {
+        for(int j = 0; j < size; j++) {
             std::cin >> matrix[i][j];
         }
     }
@@ -118,19 +152,6 @@ int main() {
         return 0;
     }
 
-    if(l != n) {
-        for(int i = 0; i < n; i++) {
-            for(int j = 0; j < n; j++) {
-                if(matrix[i][j] == 0) {
-                    matrix[i][j] = l + 1;
-                }
-                else if(matrix[i][j] > l) {
-                    matrix[i][j]++;
-                }
-            }
-        }
-    }
-
     int bound = calculateManhattan(matrix);
     if(bound == 0) {
         std::cout << "0";
@@ -138,16 +159,25 @@ int main() {
     }
 
     while(true) {
-        if(ida_star(matrix, 0, bound)) {
+        int t = ida_star(matrix, 0, bound, "");
+        if(t == FOUND) {
             break;
         }
-        bound++;
+        bound = t;
     }
     auto end = std::chrono::high_resolution_clock::now();
 
     std::cout << moves.size() << std::endl;
     for(int i = moves.size() - 1; i >= 0; i--) {
-        std::cout << moves[i] << std::endl;
+            std::cout << moves[i] << std::endl;
     }
+
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " milliseconds!" << std::endl;
 }
+
+//15 -1
+// 9 5 1 12
+// 10 0 11 13
+// 3 7 14 6
+// 2 8 15 4
+// < 30s
